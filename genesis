@@ -1,0 +1,69 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © peterblockman
+// References:
+// GENESIS MATRIX: https://www.forexfactory.com/thread/373796-genesis-matrix-trading
+// TVI: https://www.bullforyou.com/Sourcecode/Indicators/153735993217064.html
+// GANN HL: https://www.meta-formula.com/Metastock-Indicators.html#Metastock-formula-6
+//@version=4
+study("Genesis Matrix [PB]")
+// UTILS
+f_isBullSignal(series)=>series >= series[1]
+f_plotColor(bullSignal)=> bullSignal? color.lime: color.red
+
+// TVI inputs
+tviR = input(12, title="TVI R")
+tviS= input(12, title="TVI S")
+tviU = input(5, title="TVI U")
+upTicks=(volume+(close-open)/syminfo.mintick)/2 
+downTicks=volume-upTicks
+f_emaTicks(ticks, len) => ema(ticks, len)
+emaUpTicks = f_emaTicks(upTicks, tviR)
+emaDownTicks = f_emaTicks(downTicks, tviS)
+demaUpticks = f_emaTicks(emaUpTicks, tviR)
+demaDownTicks = f_emaTicks(emaDownTicks, tviS)
+tviSrc=100.0*(demaUpticks-demaDownTicks)/(demaUpticks+demaDownTicks)
+TVI=ema(tviSrc,tviU)
+tviBullSignal = f_isBullSignal(TVI)
+
+// CCI
+cciLength = input(20, title="CCI length")
+cciSrc = input(close, title="CCI source")
+CCI = cci(cciSrc, cciLength)
+cciBullSignal =  CCI > 0
+
+// T3
+t3Length = input(8, "T3 length")
+factor = input(0.618, "T3 volume factor")
+calT3(src, length) =>
+    ema(src, length) * (1 + factor) - ema(ema(src, length), length) * factor
+T3 = calT3(calT3(calT3(close, t3Length), t3Length), t3Length)
+t3BullSignal = f_isBullSignal(T3)
+
+// GANN
+gannHighLowLength= input(10,"Gann high low length")
+gannHLD=  iff(close > sma(high,gannHighLowLength)[1], 1, iff(close<sma(low,gannHighLowLength)[1],-1, 0))
+gannHLValue= valuewhen(gannHLD!=0,gannHLD,0)
+gannBullSignal = gannHLValue > 0
+
+// PLOT
+// Dot style
+circleStyle= "CIRCLE"
+squareStyle = "SQUARE"
+dotStyle = input(squareStyle, title="Dot style", options=[circleStyle, squareStyle])
+isCircleStyle = dotStyle == circleStyle
+isSquareStyle = dotStyle == squareStyle
+plotStyle = isCircleStyle? plot.style_circles: plot.style_columns
+
+plot(9, title="TVI signal", style=plotStyle, color=f_plotColor(tviBullSignal),linewidth=4, histbase=11)
+plot(6, title="CCI signal", style=plotStyle, color=f_plotColor(cciBullSignal),linewidth=4, histbase=8)
+plot(3, title="T3 signal", style=plotStyle, color=f_plotColor(t3BullSignal),linewidth=4, histbase=5)
+plot(0, title="Gann signal", style=plotStyle, color=f_plotColor(gannBullSignal),linewidth=4, histbase=2)
+
+//ALERT
+isAllGreen = tviBullSignal and cciBullSignal and t3BullSignal and gannBullSignal
+isAllRed = not tviBullSignal and not cciBullSignal and not t3BullSignal and not gannBullSignal
+isTrendReversal = isAllGreen[1] != isAllGreen
+isMatrixSquaresTurnGreen = not isAllGreen[1] and isAllGreen
+isMatrixSquaresTurnRed = not isAllRed[1] and isAllRed
+alertcondition(isMatrixSquaresTurnGreen, title="Matrix all green", message="Matrix all green")
+alertcondition(isMatrixSquaresTurnRed, title="Matrix all red", message="Matrix all red")
